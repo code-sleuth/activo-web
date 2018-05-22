@@ -5,7 +5,7 @@ module.exports = {
   "transform": {
     "^.+\\.tsx?$": "ts-jest"
   },
-  "testRegex": "(roots/.*|(\\.|/)(test|spec))\\.tsx?$",
+  "testRegex": "(roots/.*|(\\.|/)(test))\\.tsx?$",
   "moduleFileExtensions": [
     "ts",
     "tsx",
@@ -14,6 +14,8 @@ module.exports = {
     "json",
     "node"
   ],
+  "collectCoverage": true,
+  "collectCoverageFrom": ["src/**/*.tsx"],
   "snapshotSerializers": ["enzyme-to-json/serializer"],
-  "setupTestFrameworkScriptFile": "roots/setupEnzyme.ts",
+  "setupTestFrameworkScriptFile": "<rootDir>/src/setupEnzyme.ts",
 }
