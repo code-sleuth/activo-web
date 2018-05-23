@@ -1,9 +1,9 @@
 import * as React from 'react';
 import toJSON from 'enzyme-to-json';
 import { shallow } from 'enzyme';
-import AuthPage from './AuthPage.component';
+import AuthPage from './index';
 
-describe('Auth component', () => {
+describe('Auth page', () => {
   it('should be rendered properly', () => {
     const wrapper = shallow(<AuthPage />);
 
