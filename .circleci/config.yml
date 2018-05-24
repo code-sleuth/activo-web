@@ -1,0 +1,88 @@
+default: &defaults
+    docker:
+        - image: gcr.io/${GCLOUD_ACTIVO_PROJECT}/activo-web-ci-image
+          auth:
+            username: _json_key
+            password: '${SERVICE_ACCOUNT}'
+          environment:
+            ACTIVO_PATH: /home/circleci/activo-web
+            CC_TEST_REPORTER_ID: ${CC_TEST_REPORTER_ID}
+    # specify working directory
+    working_directory: ~/activo-web
+
+cmd_update_npm: &cmd_update_npm
+    run:
+     name: Update npm to latest stable version
+     command: |
+        sudo npm install -g npm
+cmd_restore_cache: &cmd_restore_cache
+    restore_cache:
+            keys:
+            - activo-dependencies-{{ checksum "package.json" }}
+cmd_install_dependencies: &cmd_install_dependencies
+    run:
+      name: Install dependencies
+      command: |
+        yarn install
+cmd_install_dependencies: &cmd_save_cache
+    save_cache:
+        key: activo-dependencies-{{ checksum "yarn.lock" }}
+        paths:
+          - node_modules
+
+cmd_download_cc_test_reporter: &cmd_download_cc_test_reporter
+  run:
+    name:  Download cc-test-reporter
+    command: |
+      mkdir -p tmp/
+      curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > /tmp/cc-test-reporter
+      chmod +x /tmp/cc-test-reporter
+
+cmd_attach_workspace: &cmd_attach_workspace
+  attach_workspace:
+    at: tmp/
+
+
+version: 2
+jobs:
+  build:
+    <<: *defaults
+    steps:
+      - checkout
+      - *cmd_update_npm
+      - *cmd_install_dependencies
+      - *cmd_save_cache
+        
+  end_to_end_tests:
+    <<: *defaults
+    steps:
+        - checkout
+        - *cmd_update_npm
+        - *cmd_install_dependencies
+        - *cmd_save_cache
+        - run:
+            name: Run end to end tests
+            command: yarn test:e2e
+
+  unit_tests:
+    <<: *defaults
+    steps:
+        - checkout
+        - *cmd_restore_cache
+        - *cmd_install_dependencies
+        - *cmd_save_cache
+        - run:
+            name: Run unit tests
+            command: yarn test:unit
+
+workflows:
+  version: 2
+  build_and_test:
+    jobs:
+      - build
+      - end_to_end_tests:
+          requires:
+            - build
+      - unit_tests:
+          requires:
+            - build
