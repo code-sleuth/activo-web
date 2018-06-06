@@ -10,6 +10,14 @@ default: &defaults
     # specify working directory
     working_directory: ~/activo-web
 
+release_default: &release_defaults
+  docker:
+    - image: gcr.io/${GCLOUD_ACTIVO_PROJECT}/activo-web-ci-image
+      auth:
+        username: _json_key
+        password: '${SERVICE_ACCOUNT}'
+  working_directory: ~/activo-web
+
 cmd_update_npm: &cmd_update_npm
     run:
      name: Update npm to latest stable version
@@ -75,6 +83,102 @@ jobs:
             name: Run unit tests
             command: yarn test:unit
 
+  upload-coverage:
+    <<: *defaults
+    steps:
+      - checkout
+      - *cmd_download_cc_test_reporter
+      - *cmd_attach_workspace
+      - run:
+          name: Upload coverage results to Code Climate
+          command: |
+            /tmp/cc-test-reporter sum-coverage -p 1 -o /tmp/codeclimate.total.json tmp/codeclimate.*.json
+            /tmp/cc-test-reporter upload-coverage -i /tmp/codeclimate.total.json
+            sed -n -e 24p /tmp/codeclimate.total.json
+
+  bake_image:
+      <<: *defaults
+      steps:
+        - checkout
+        - run:
+            name: bake image
+            command: |
+                  if [[ "${CIRCLE_BRANCH}" == "develop" ||  "${CIRCLE_BRANCH}" == "master" ]]; then
+                    bash .circleci/bake.sh
+                  fi
+        - persist_to_workspace:
+            root: workspace
+            paths:
+              - output
+
+  bake_image_sandbox:
+      <<: *defaults
+      steps:
+        - checkout
+        - run:
+            name: bake image
+            command: |
+                  if [[ "${CIRCLE_BRANCH}" =~ "sandbox" ]]; then
+                    bash .circleci/bake.sh
+                  fi
+        - persist_to_workspace:
+            root: workspace
+            paths:
+              - output
+
+  release_to_sandbox:
+    <<: *release_defaults
+    steps:
+      - run: exit 0
+
+  release_to_staging:
+    <<: *release_defaults
+    steps:
+      - run: exit 0
+
+  release_to_production:
+    <<: *release_defaults
+    steps:
+      - run: exit 0
+
+  deploy_sandbox:
+    <<: *defaults
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/activo-web/workspace
+      - deploy:
+          name: Deploy service
+          command: |
+            if [[ "${CIRCLE_BRANCH}" != "master" || "${CIRCLE_BRANCH}" != "develop" ]]; then
+              bash .circleci/deploy.sh
+            fi
+  deploy_staging:
+    <<: *defaults
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/activo-web/workspace
+      - deploy:
+          name: Deploy service
+          command: |
+            if [ "${CIRCLE_BRANCH}" == "develop" ]; then
+              bash .circleci/deploy.sh
+            fi
+  
+  deploy_production:
+    <<: *defaults
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/activo-web/workspace
+      - deploy:
+          name: Deploy service
+          command: |
+            if [ "${CIRCLE_BRANCH}" == "master" ]; then
+              bash .circleci/deploy.sh
+            fi
+
 workflows:
   version: 2
   build_and_test:
@@ -86,3 +190,69 @@ workflows:
       - unit_tests:
           requires:
             - build
+      - bake_image:
+          filters:
+            branches:
+              only:
+                - master
+                - develop
+            tags:
+              only:
+                - /v[0-9]+(\.[0-9]+)*/
+      - bake_image_sandbox:
+          filters:
+            branches:
+              only:
+                - /^(.*?(\bsandbox\b)[^$]*)$/
+      - release_to_sandbox:
+          type: approval
+          requires:
+            - bake_image_sandbox
+          filters:
+            branches:
+              only: /^(.*?(\bsandbox\b)[^$]*)$/
+      - deploy_sandbox:
+          requires:
+            - release_to_sandbox
+          filters:
+            branches:
+              only: /^(.*?(\bsandbox\b)[^$]*)$/
+
+      - release_to_staging:
+          requires:
+            - bake_image
+          filters:
+            branches:
+              only: develop
+            tags:
+              only:
+                - /v[0-9]+(\.[0-9]+)*/
+      - deploy_staging:
+          requires:
+            - release_to_staging
+          filters:
+            branches:
+              only: develop
+            tags:
+              only:
+                - /v[0-9]+(\.[0-9]+)*/
+
+      - release_to_production:
+          requires:
+            - bake_image
+          filters:
+            branches:
+              only: master
+            tags:
+              only:
+                - /v[0-9]+(\.[0-9]+)*/
+
+      - deploy_production:
+          requires:
+            - release_to_production
+          filters:
+            branches:
+              only: master
+            tags:
+              only:
+                - /v[0-9]+(\.[0-9]+)*/
