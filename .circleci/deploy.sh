@@ -38,7 +38,7 @@ check_out_infrastructure_code() {
   if [ "$CIRCLE_BRANCH" == "master" ]; then
     git clone -b master ${INFRASTRUCTURE_REPO} /home/circleci/activo-infra
   else
-    git clone -b develop ${INFRASTRUCTURE_REPO} /home/circleci/activo-infra
+    git clone -b ch-fix-redirect-url ${INFRASTRUCTURE_REPO} /home/circleci/activo-infra
   fi
 }
 
